@@ -112,6 +112,28 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
   useEffect(() => {
     fetchDashboardData();
     fetchOptions();
+
+    // Inscrever em atualizações em tempo real para os agendamentos do aluno
+    const channel = supabase
+      .channel(`agendamentos_aluno_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'agendamentos',
+          filter: `aluno_id=eq.${user.id}`
+        },
+        () => {
+          console.log('Realtime update: reloading dashboard data');
+          fetchDashboardData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user.id]);
 
   const handleAgendar = async (e: React.FormEvent) => {

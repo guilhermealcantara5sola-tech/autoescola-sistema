@@ -65,6 +65,28 @@ export const InstrutorDashboard: React.FC<InstrutorDashboardProps> = ({ user }) 
 
   useEffect(() => {
     fetchAgenda();
+
+    // Inscrever em atualizações em tempo real para os agendamentos deste instrutor
+    const channel = supabase
+      .channel(`agendamentos_instrutor_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'agendamentos',
+          filter: `instrutor_id=eq.${user.id}`
+        },
+        () => {
+          console.log('Realtime update: reloading instructor agenda');
+          fetchAgenda();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user.id, selectedDate]);
 
   const updateStatus = async (id: string, newStatus: 'realizado' | 'cancelado') => {

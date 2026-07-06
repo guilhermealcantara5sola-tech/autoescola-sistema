@@ -59,6 +59,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [newTipo, setNewTipo] = useState<'carro' | 'moto'>('carro');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // WhatsApp manual notification trigger states
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappResult, setWhatsappResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [sendingIndividualId, setSendingIndividualId] = useState<string | null>(null);
+
   const fetchMetrics = async () => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -171,7 +176,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
   useEffect(() => {
     loadAllData();
+
+    // Inscrever em atualizações em tempo real para todos os agendamentos (visão admin)
+    const channel = supabase
+      .channel('agendamentos_admin')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'agendamentos'
+        },
+        () => {
+          console.log('Realtime update: reloading admin dashboard data');
+          fetchMetrics();
+          fetchAgendamentos();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user.id]);
+
+  const triggerWhatsappNotifications = async () => {
+    setSendingWhatsapp(true);
+    setWhatsappResult(null);
+    try {
+      const response = await fetch('/api/send-notifications');
+      const data = await response.json();
+      if (response.ok) {
+        setWhatsappResult({
+          type: 'success',
+          message: `Lembretes processados com sucesso! ${data.results?.length || 0} envio(s) realizado(s).`
+        });
+        fetchAgendamentos();
+      } else {
+        setWhatsappResult({
+          type: 'error',
+          message: data.error || 'Erro desconhecido ao enviar lembretes.'
+        });
+      }
+    } catch (err: any) {
+      setWhatsappResult({
+        type: 'error',
+        message: err.message || 'Falha de rede ao chamar o serviço de notificações.'
+      });
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
+
+  const sendSingleWhatsappNotification = async (id: string) => {
+    setSendingIndividualId(id);
+    try {
+      const response = await fetch(`/api/send-notifications?id=${id}`);
+      const data = await response.json();
+      if (response.ok) {
+        alert('Lembrete de WhatsApp enviado para o aluno com sucesso!');
+        fetchAgendamentos();
+      } else {
+        alert('Erro ao enviar mensagem: ' + (data.error || 'Erro desconhecido.'));
+      }
+    } catch (err: any) {
+      alert('Falha de conexão ao enviar mensagem: ' + err.message);
+    } finally {
+      setSendingIndividualId(null);
+    }
+  };
 
   // Actions
   const handleAddVehicle = async (e: React.FormEvent) => {
@@ -359,12 +432,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
           </div>
 
-          {/* Quick status message */}
-          <div className="card" style={{ padding: '1.5rem' }}>
-            <h4 style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Status da Operação</h4>
-            <p style={{ fontSize: '0.95rem', lineHeight: 1.5, margin: 0 }}>
-              O sistema está operando normalmente. O webhook do WhatsApp está pronto para receber respostas de confirmação de agendamentos. Acesse a aba <strong>Monitor de Aulas</strong> para visualizar a grade completa e o status de confirmação enviado a cada aluno.
-            </p>
+          {/* Quick status message & WhatsApp Control */}
+          <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <h4 style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Confirmações Automáticas via WhatsApp</h4>
+              <p style={{ fontSize: '0.95rem', lineHeight: 1.5, margin: 0, color: 'var(--muted)' }}>
+                O webhook do WhatsApp está ativo para receber respostas (<strong>1</strong> para confirmar, <strong>2</strong> para cancelar).
+                Use o botão abaixo para disparar manualmente os lembretes para todas as aulas agendadas para amanhã.
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button
+                  onClick={triggerWhatsappNotifications}
+                  disabled={sendingWhatsapp}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '40px', padding: '0 1rem' }}
+                >
+                  {sendingWhatsapp ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Enviando Lembretes...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={16} />
+                      Disparar Lembretes para Amanhã
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {whatsappResult && (
+                <div style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.875rem',
+                  backgroundColor: whatsappResult.type === 'success' ? 'var(--success-bg)' : 'var(--error-bg)',
+                  color: whatsappResult.type === 'success' ? 'var(--success-text)' : 'var(--error-text)',
+                  border: `1px solid ${whatsappResult.type === 'success' ? 'var(--success-border)' : 'var(--error-border)'}`
+                }}>
+                  {whatsappResult.message}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -412,18 +524,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                         {
                           item.whatsapp_status === 'confirmado_aluno' ? <span style={{ color: 'var(--success)' }}>✅ Confirmado</span> :
                           item.whatsapp_status === 'recusado_aluno' ? <span style={{ color: 'var(--error)' }}>❌ Recusado</span> :
-                          item.whatsapp_status === 'enviado' ? <span style={{ color: '#2563eb' }}>📤 Enviado</span> : <span style={{ color: 'var(--muted)' }}>⏳ Não enviado</span>
+                          item.whatsapp_status === 'enviado' ? <span style={{ color: '#2563eb' }}>📤 Enviado</span> :
+                          item.whatsapp_status === 'erro' ? <span style={{ color: 'var(--error)' }}>⚠️ Erro</span> :
+                          <span style={{ color: 'var(--muted)' }}>⏳ Não enviado</span>
                         }
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                         {item.status !== 'cancelado' && item.status !== 'realizado' ? (
-                          <button 
-                            onClick={() => handleCancelAgendamento(item.id)}
-                            className="btn btn-secondary" 
-                            style={{ padding: '0.2rem 0.5rem', height: '28px', fontSize: '0.75rem', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}
-                          >
-                            Cancelar
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                            <button 
+                              onClick={() => sendSingleWhatsappNotification(item.id)}
+                              disabled={sendingIndividualId === item.id}
+                              className="btn btn-secondary" 
+                              style={{ padding: '0.2rem 0.5rem', height: '28px', fontSize: '0.75rem' }}
+                            >
+                              {sendingIndividualId === item.id ? 'Aguarde...' : 'Enviar WhatsApp'}
+                            </button>
+                            <button 
+                              onClick={() => handleCancelAgendamento(item.id)}
+                              className="btn btn-secondary" 
+                              style={{ padding: '0.2rem 0.5rem', height: '28px', fontSize: '0.75rem', borderColor: 'var(--error-border)', color: 'var(--error-text)' }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
                         ) : (
                           <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Finalizado</span>
                         )}
