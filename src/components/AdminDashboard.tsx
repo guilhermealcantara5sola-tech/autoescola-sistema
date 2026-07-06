@@ -34,6 +34,7 @@ interface Agendamento {
   tipo_aula: string;
   status: string;
   whatsapp_status: string;
+  whatsapp_antecedencia?: number | null;
   aluno: { nome_completo: string } | null;
   instrutor: { nome_completo: string } | null;
   veiculo: { modelo: string; placa: string } | null;
@@ -108,7 +109,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       const { data, error } = await supabase
         .from('agendamentos')
         .select(`
-          id, data, hora_inicio, hora_fim, tipo_aula, status, whatsapp_status,
+          id, data, hora_inicio, hora_fim, tipo_aula, status, whatsapp_status, whatsapp_antecedencia,
           aluno:aluno_id ( nome_completo ),
           instrutor:instrutor_id ( nome_completo ),
           veiculo:veiculo_id ( modelo, placa )
@@ -126,6 +127,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         tipo_aula: item.tipo_aula,
         status: item.status,
         whatsapp_status: item.whatsapp_status,
+        whatsapp_antecedencia: item.whatsapp_antecedencia,
         aluno: Array.isArray(item.aluno) ? item.aluno[0] : item.aluno,
         instrutor: Array.isArray(item.instrutor) ? item.instrutor[0] : item.instrutor,
         veiculo: Array.isArray(item.veiculo) ? item.veiculo[0] : item.veiculo,
@@ -276,6 +278,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       alert('Falha de conexão ao enviar mensagem: ' + err.message);
     } finally {
       setSendingIndividualId(null);
+    }
+  };
+
+  const handleSaveClassAntecedencia = async (id: string, value: string) => {
+    try {
+      const dbValue = value === '' ? null : parseInt(value, 10);
+      const { error } = await supabase
+        .from('agendamentos')
+        .update({ whatsapp_antecedencia: dbValue })
+        .eq('id', id);
+
+      if (error) {
+        alert('Erro ao salvar antecedência da aula: ' + error.message);
+      } else {
+        // Update local state to reflect change instantly
+        setAgendamentos(prev =>
+          prev.map(a => (a.id === id ? { ...a, whatsapp_antecedencia: dbValue } : a))
+        );
+      }
+    } catch (err: any) {
+      alert('Falha de rede ao salvar antecedência: ' + err.message);
     }
   };
 
@@ -593,13 +616,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                         {getStatusBadge(item.status)}
                       </td>
                       <td style={{ padding: '0.75rem', fontSize: '0.8rem', fontWeight: 500 }}>
-                        {
-                          item.whatsapp_status === 'confirmado_aluno' ? <span style={{ color: 'var(--success)' }}>✅ Confirmado</span> :
-                          item.whatsapp_status === 'recusado_aluno' ? <span style={{ color: 'var(--error)' }}>❌ Recusado</span> :
-                          item.whatsapp_status === 'enviado' ? <span style={{ color: '#2563eb' }}>📤 Enviado</span> :
-                          item.whatsapp_status === 'erro' ? <span style={{ color: 'var(--error)' }}>⚠️ Erro</span> :
-                          <span style={{ color: 'var(--muted)' }}>⏳ Não enviado</span>
-                        }
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <div>
+                            {
+                              item.whatsapp_status === 'confirmado_aluno' ? <span style={{ color: 'var(--success)' }}>✅ Confirmado</span> :
+                              item.whatsapp_status === 'recusado_aluno' ? <span style={{ color: 'var(--error)' }}>❌ Recusado</span> :
+                              item.whatsapp_status === 'enviado' ? <span style={{ color: '#2563eb' }}>📤 Enviado</span> :
+                              item.whatsapp_status === 'erro' ? <span style={{ color: 'var(--error)' }}>⚠️ Erro</span> :
+                              <span style={{ color: 'var(--muted)' }}>⏳ Não enviado</span>
+                            }
+                          </div>
+                          {item.status !== 'cancelado' && item.status !== 'realizado' && (
+                            <select
+                              value={item.whatsapp_antecedencia !== null && item.whatsapp_antecedencia !== undefined ? String(item.whatsapp_antecedencia) : ''}
+                              onChange={(e) => handleSaveClassAntecedencia(item.id, e.target.value)}
+                              style={{
+                                padding: '0.1rem 0.25rem',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(255,255,255,0.05)',
+                                border: '1px solid var(--border)',
+                                color: 'var(--foreground)',
+                                fontSize: '0.725rem',
+                                cursor: 'pointer',
+                                marginTop: '0.25rem',
+                                outline: 'none'
+                              }}
+                            >
+                              <option value="">Padrão Global</option>
+                              <option value="1">1h antes</option>
+                              <option value="2">2h antes</option>
+                              <option value="5">5h antes</option>
+                              <option value="12">12h antes</option>
+                              <option value="24">24h antes</option>
+                              <option value="48">48h antes</option>
+                            </select>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                         {item.status !== 'cancelado' && item.status !== 'realizado' ? (

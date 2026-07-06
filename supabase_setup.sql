@@ -52,8 +52,12 @@ create table if not exists public.agendamentos (
     status text default 'pendente' not null check (status in ('pendente', 'confirmado', 'cancelado', 'realizado')),
     whatsapp_status text default 'nao_enviado' not null check (whatsapp_status in ('nao_enviado', 'enviado', 'confirmado_aluno', 'recusado_aluno', 'erro')),
     mensagem_sid text,
+    whatsapp_antecedencia integer default null,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Garantir que a coluna whatsapp_antecedencia exista se a tabela já tiver sido criada antes
+alter table public.agendamentos add column if not exists whatsapp_antecedencia integer default null;
 
 -- =========================================================================
 -- 2. TRIGGER DE SINCRONIZAÇÃO DE USUÁRIOS (AUTH -> PUBLIC)

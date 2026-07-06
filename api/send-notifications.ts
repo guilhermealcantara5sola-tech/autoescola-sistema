@@ -21,24 +21,10 @@ export default async function handler(req: any, res: any) {
 
   try {
     const agendamentoId = req.query.id || (req.body && req.body.id);
-    let targetDateStr = '';
+    let leadHours = 24;
 
-    let query = supabase
-      .from('agendamentos')
-      .select(`
-        id,
-        data,
-        hora_inicio,
-        tipo_aula,
-        aluno:aluno_id ( nome_completo, telefone )
-      `);
-
-    if (agendamentoId) {
-      console.log(`Sending single WhatsApp notification for booking ID: ${agendamentoId}`);
-      query = query.eq('id', agendamentoId);
-    } else {
-      // Get the configured lead hours from the database
-      let leadHours = 24;
+    // Fetch the global lead hours from the database config
+    if (!agendamentoId) {
       try {
         const { data: configData } = await supabase
           .from('configuracoes')
@@ -51,51 +37,33 @@ export default async function handler(req: any, res: any) {
       } catch (e) {
         console.log('Using default 24h lead time (table configuracoes not found or error)');
       }
+    }
 
-      console.log(`Calculating target time window for ${leadHours} hours ahead.`);
+    let query = supabase
+      .from('agendamentos')
+      .select(`
+        *,
+        aluno:aluno_id ( nome_completo, telefone )
+      `);
 
-      if (leadHours >= 24) {
-        // Day-based search (e.g. 24h or 48h before)
-        const targetDate = new Date();
-        targetDate.setHours(targetDate.getHours() - 3 + leadHours);
-        targetDateStr = targetDate.toISOString().split('T')[0];
+    if (agendamentoId) {
+      console.log(`Sending single WhatsApp notification for booking ID: ${agendamentoId}`);
+      query = query.eq('id', agendamentoId);
+    } else {
+      // Fetch classes for today and the next 3 days to cover all possible lead times
+      const today = new Date();
+      today.setHours(today.getHours() - 3); // Brazil Time
+      const todayStr = today.toISOString().split('T')[0];
 
-        console.log(`Scanning database for classes scheduled on date: ${targetDateStr}`);
-        query = query
-          .eq('data', targetDateStr)
-          .in('status', ['pendente', 'confirmado'])
-          .in('whatsapp_status', ['nao_enviado', 'erro']);
-      } else {
-        // Hour-based search (e.g. 1h, 2h, 5h, 12h before)
-        const nowInBrazil = new Date();
-        nowInBrazil.setHours(nowInBrazil.getHours() - 3); // BR Time
+      const maxDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const maxDateStr = maxDate.toISOString().split('T')[0];
 
-        const targetTimeMin = new Date(nowInBrazil.getTime() + (leadHours - 0.5) * 60 * 60 * 1000);
-        const targetTimeMax = new Date(nowInBrazil.getTime() + (leadHours + 0.5) * 60 * 60 * 1000);
-
-        const targetDateMinStr = targetTimeMin.toISOString().split('T')[0];
-        const targetDateMaxStr = targetTimeMax.toISOString().split('T')[0];
-
-        const timeMinStr = targetTimeMin.toTimeString().split(' ')[0]; // HH:MM:SS
-        const timeMaxStr = targetTimeMax.toTimeString().split(' ')[0]; // HH:MM:SS
-
-        console.log(`Scanning for classes starting between ${timeMinStr} and ${timeMaxStr} on date ${targetDateMinStr}`);
-
-        if (targetDateMinStr === targetDateMaxStr) {
-          query = query
-            .eq('data', targetDateMinStr)
-            .gte('hora_inicio', timeMinStr)
-            .lte('hora_inicio', timeMaxStr)
-            .in('status', ['pendente', 'confirmado'])
-            .in('whatsapp_status', ['nao_enviado', 'erro']);
-        } else {
-          // Window spans across midnight (e.g., Min is today 23:30, Max is tomorrow 00:30)
-          query = query
-            .or(`and(data.eq.${targetDateMinStr},hora_inicio.gte.${timeMinStr}),and(data.eq.${targetDateMaxStr},hora_inicio.lte.${timeMaxStr})`)
-            .in('status', ['pendente', 'confirmado'])
-            .in('whatsapp_status', ['nao_enviado', 'erro']);
-        }
-      }
+      console.log(`Scanning database for classes scheduled between: ${todayStr} and ${maxDateStr}`);
+      query = query
+        .gte('data', todayStr)
+        .lte('data', maxDateStr)
+        .in('status', ['pendente', 'confirmado'])
+        .in('whatsapp_status', ['nao_enviado', 'erro']);
     }
 
     const { data: agendamentos, error: dbError } = await query;
@@ -106,8 +74,8 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({
         message: agendamentoId 
           ? `Booking with ID ${agendamentoId} not found.`
-          : 'No classes found needing WhatsApp notifications for tomorrow.',
-        date: targetDateStr || undefined
+          : 'No classes found needing WhatsApp notifications.',
+        results: []
       });
     }
 
@@ -133,6 +101,25 @@ export default async function handler(req: any, res: any) {
       const rawName = aluno.nome_completo || 'Aluno';
       const firstName = rawName.split(' ')[0];
 
+      // Calculate hours remaining until class start
+      const classStartStr = `${item.data}T${item.hora_inicio}`;
+      const classDate = new Date(`${classStartStr}-03:00`); // Brazil timezone
+      const now = new Date();
+      const diffMs = classDate.getTime() - now.getTime();
+      const hoursRemaining = diffMs / (1000 * 60 * 60);
+
+      // If we are scanning automatically, verify if this class is due
+      if (!agendamentoId) {
+        const L = item.whatsapp_antecedencia !== undefined && item.whatsapp_antecedencia !== null
+          ? Number(item.whatsapp_antecedencia)
+          : leadHours;
+
+        // Skip if class is in the past, or starts further than the lead hours
+        if (hoursRemaining <= 0 || hoursRemaining > L) {
+          continue;
+        }
+      }
+
       let classTypeLabel = '';
       if (item.tipo_aula === 'pratica_carro') classTypeLabel = 'Prática de Carro';
       else if (item.tipo_aula === 'pratica_moto') classTypeLabel = 'Prática de Moto';
@@ -141,19 +128,19 @@ export default async function handler(req: any, res: any) {
       const hora = item.hora_inicio.substring(0, 5);
 
       // Calculate diff in days to make text dynamic (hoje, amanhã, or no dia XX/XX/XXXX)
-      const classDate = new Date(item.data + 'T12:00:00');
+      const classDayDate = new Date(item.data + 'T12:00:00');
       const today = new Date();
       today.setHours(12, 0, 0, 0);
-      const diffTime = classDate.getTime() - today.getTime();
+      const diffTime = classDayDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       let dayText = '';
       if (diffDays === 0) dayText = 'hoje';
       else if (diffDays === 1) dayText = 'amanhã';
-      else dayText = `no dia ${classDate.toLocaleDateString('pt-BR')}`;
+      else dayText = `no dia ${classDayDate.toLocaleDateString('pt-BR')}`;
 
       // Build message body
-      const bodyText = `Olá ${firstName}, confirma sua aula de ${classTypeLabel} ${dayText} (${classDate.toLocaleDateString('pt-BR')}) às ${hora}? Responda 1 para CONFIRMAR ou 2 para CANCELAR.`;
+      const bodyText = `Olá ${firstName}, confirma sua aula de ${classTypeLabel} ${dayText} (${classDayDate.toLocaleDateString('pt-BR')}) às ${hora}? Responda 1 para CONFIRMAR ou 2 para CANCELAR.`;
 
       try {
         const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
