@@ -3,9 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Exibir no console informações úteis para depuração sem expor chaves sensíveis
+console.log('Supabase Config:', {
+  url: supabaseUrl || 'Não configurada (undefined)',
+  hasAnonKey: !!supabaseAnonKey,
+  anonKeyLength: supabaseAnonKey ? supabaseAnonKey.length : 0,
+});
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
-    'Supabase URL ou Anon Key não configurados. Verifique o seu arquivo .env.local'
+    'Supabase URL ou Anon Key não configurados. Verifique o seu arquivo .env.local (local) ou as configurações de Environment Variables na Vercel.'
   );
 }
 

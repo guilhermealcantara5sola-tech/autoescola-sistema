@@ -177,6 +177,24 @@ export const Dashboard: React.FC = () => {
                       <p style={{ fontSize: '0.85rem' }}>Instrutor: Roberto Nunes • Veículo: Chevrolet Onix (ABC-1234)</p>
                     </div>
                   </div>
+
+                  <h4 style={{ marginTop: '1.5rem', marginBottom: '0.75rem', fontWeight: 600 }}>Aulas Recentes Concluídas</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <div style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                      <div style={{ textAlign: 'left' }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--foreground)', margin: 0 }}>Aula Prática - Carro</p>
+                        <p style={{ fontSize: '0.8rem', margin: 0 }}>03/07/2026 • Roberto Nunes</p>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--success-bg)', color: 'var(--success-text)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontWeight: 600 }}>Realizada</span>
+                    </div>
+                    <div style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                      <div style={{ textAlign: 'left' }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--foreground)', margin: 0 }}>Aula Prática - Carro</p>
+                        <p style={{ fontSize: '0.8rem', margin: 0 }}>30/06/2026 • Roberto Nunes</p>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--success-bg)', color: 'var(--success-text)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontWeight: 600 }}>Realizada</span>
+                    </div>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                   <button className="btn btn-primary" style={{ flex: 1 }}>Agendar Nova Aula</button>
