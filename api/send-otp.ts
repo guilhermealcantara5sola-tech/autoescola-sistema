@@ -25,11 +25,22 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Twilio credentials not configured' });
   }
 
-  // Format phone: keep only numbers and '+'
-  let cleanPhone = phone.trim().replace(/[^\d+]/g, '');
-  if (!cleanPhone.startsWith('+')) {
-    cleanPhone = `+55${cleanPhone}`;
+function formatBrazilianPhone(phone: string): string {
+  let clean = phone.replace(/\D/g, '');
+  if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
+    clean = clean.substring(2);
   }
+  if (clean.length === 11) {
+    const ddd = parseInt(clean.substring(0, 2), 10);
+    const leadingNine = clean.charAt(2);
+    if (ddd >= 31 && leadingNine === '9') {
+      clean = clean.substring(0, 2) + clean.substring(3);
+    }
+  }
+  return `+55${clean}`;
+}
+
+  const cleanPhone = formatBrazilianPhone(phone);
   const formattedPhone = `whatsapp:${cleanPhone}`;
 
   // Generate 6-digit OTP

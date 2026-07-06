@@ -11,6 +11,21 @@ function sendTwiMLReply(res: any, text: string) {
   return res.status(200).send(twiml);
 }
 
+function formatBrazilianPhone(phone: string): string {
+  let clean = phone.replace(/\D/g, '');
+  if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
+    clean = clean.substring(2);
+  }
+  if (clean.length === 11) {
+    const ddd = parseInt(clean.substring(0, 2), 10);
+    const leadingNine = clean.charAt(2);
+    if (ddd >= 31 && leadingNine === '9') {
+      clean = clean.substring(0, 2) + clean.substring(3);
+    }
+  }
+  return `+55${clean}`;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -32,8 +47,9 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing From parameter.' });
     }
 
-    // Clean phone number: remove 'whatsapp:' prefix
-    const cleanedPhone = fromPhone.replace('whatsapp:', '').trim();
+    // Clean phone number: remove 'whatsapp:' prefix and standardize format
+    const rawPhone = fromPhone.replace('whatsapp:', '').trim();
+    const cleanedPhone = formatBrazilianPhone(rawPhone);
 
     // 1. Find the student profile by matching the phone number
     const { data: profiles, error: dbError } = await supabase

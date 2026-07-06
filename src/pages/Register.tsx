@@ -22,6 +22,22 @@ export const Register: React.FC = () => {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
+  const [authCode, setAuthCode] = useState('');
+
+  const formatBrazilianPhone = (p: string) => {
+    let clean = p.replace(/\D/g, '');
+    if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
+      clean = clean.substring(2);
+    }
+    if (clean.length === 11) {
+      const ddd = parseInt(clean.substring(0, 2), 10);
+      const leadingNine = clean.charAt(2);
+      if (ddd >= 31 && leadingNine === '9') {
+        clean = clean.substring(0, 2) + clean.substring(3);
+      }
+    }
+    return `+55${clean}`;
+  };
 
   const handleSendOtp = async () => {
     if (!phone) return;
@@ -29,10 +45,11 @@ export const Register: React.FC = () => {
     setOtpError(null);
     setOtpSuccess(null);
     try {
+      const formattedPhone = formatBrazilianPhone(phone);
       const response = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: formattedPhone }),
       });
       const data = await response.json();
       if (response.ok) {
@@ -40,6 +57,7 @@ export const Register: React.FC = () => {
         setOtpSuccess('Código enviado para o seu WhatsApp!');
       } else {
         setOtpError(data.error || 'Erro ao enviar código.');
+        alert('Erro ao enviar código: ' + (data.error || 'Verifique se rodou a tabela no Supabase.'));
       }
     } catch (err: any) {
       setOtpError('Erro de conexão ao enviar código.');
@@ -54,10 +72,11 @@ export const Register: React.FC = () => {
     setOtpError(null);
     setOtpSuccess(null);
     try {
+      const formattedPhone = formatBrazilianPhone(phone);
       const response = await fetch('/api/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, code: otpCode }),
+        body: JSON.stringify({ phone: formattedPhone, code: otpCode }),
       });
       const data = await response.json();
       if (response.ok && data.verified) {
@@ -81,11 +100,17 @@ export const Register: React.FC = () => {
       return;
     }
 
+    if ((role === 'instrutor' || role === 'admin') && authCode !== 'AUTO2026') {
+      setError('Código de autorização administrativa incorreto.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSuccess(false);
 
     try {
+      const formattedPhone = formatBrazilianPhone(phone);
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -93,7 +118,7 @@ export const Register: React.FC = () => {
           data: {
             nome_completo: fullName,
             tipo: role,
-            telefone: phone,
+            telefone: formattedPhone,
             data_nascimento: birthDate,
           },
         },
@@ -267,6 +292,28 @@ export const Register: React.FC = () => {
                 <option value="admin">Administrador</option>
               </select>
             </div>
+
+            {(role === 'instrutor' || role === 'admin') && (
+              <div className="form-group fade-in" style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                padding: '0.75rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border)'
+              }}>
+                <label className="form-label" htmlFor="authCode" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                  Código de Autorização Administrativa
+                </label>
+                <input
+                  id="authCode"
+                  type="password"
+                  className="form-control"
+                  placeholder="Digite a senha de liberação (Ex: AUTO2026)"
+                  value={authCode}
+                  onChange={(e) => setAuthCode(e.target.value)}
+                  required
+                />
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label" htmlFor="phone">

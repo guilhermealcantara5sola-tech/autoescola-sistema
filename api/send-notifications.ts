@@ -1,6 +1,21 @@
 /// <reference types="node" />
 import { createClient } from '@supabase/supabase-js';
 
+function formatBrazilianPhone(phone: string): string {
+  let clean = phone.replace(/\D/g, '');
+  if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
+    clean = clean.substring(2);
+  }
+  if (clean.length === 11) {
+    const ddd = parseInt(clean.substring(0, 2), 10);
+    const leadingNine = clean.charAt(2);
+    if (ddd >= 31 && leadingNine === '9') {
+      clean = clean.substring(0, 2) + clean.substring(3);
+    }
+  }
+  return `+55${clean}`;
+}
+
 export default async function handler(req: any, res: any) {
   // Support both GET and POST for easy manual testing in the browser
   const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
@@ -90,14 +105,8 @@ export default async function handler(req: any, res: any) {
         continue;
       }
 
-      let phone = aluno.telefone.trim();
-      // Clean phone number: keep only digits and '+'
-      phone = phone.replace(/[^\d+]/g, '');
-      // If it doesn't start with '+', assume Brazilian country code (+55)
-      if (!phone.startsWith('+')) {
-        phone = `+55${phone}`;
-      }
-      const formattedPhone = `whatsapp:${phone}`;
+      const cleanPhone = formatBrazilianPhone(aluno.telefone);
+      const formattedPhone = `whatsapp:${cleanPhone}`;
       const rawName = aluno.nome_completo || 'Aluno';
       const firstName = rawName.split(' ')[0];
 
