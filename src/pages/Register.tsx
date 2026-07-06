@@ -226,6 +226,49 @@ export const Register: React.FC = () => {
             </div>
 
             <div className="form-group">
+              <label className="form-label" htmlFor="birthDate">
+                Data de Nascimento
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Calendar 
+                  size={18} 
+                  style={{ 
+                    position: 'absolute', 
+                    left: '12px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)', 
+                    color: 'var(--muted)' 
+                  }} 
+                />
+                <input
+                  id="birthDate"
+                  type="date"
+                  className="form-control"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  style={{ paddingLeft: '2.5rem' }}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="role">
+                Tipo de Usuário
+              </label>
+              <select
+                id="role"
+                className="form-control"
+                value={role}
+                onChange={(e) => setRole(e.target.value as any)}
+              >
+                <option value="aluno">Aluno</option>
+                <option value="instrutor">Instrutor</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+
+            <div className="form-group">
               <label className="form-label" htmlFor="phone">
                 Telefone (WhatsApp)
               </label>
@@ -317,49 +360,6 @@ export const Register: React.FC = () => {
                 {otpSuccess && <p style={{ color: 'var(--success)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>✅ {otpSuccess}</p>}
               </div>
             )}
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="birthDate">
-                Data de Nascimento
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Calendar 
-                  size={18} 
-                  style={{ 
-                    position: 'absolute', 
-                    left: '12px', 
-                    top: '50%', 
-                    transform: 'translateY(-50%)', 
-                    color: 'var(--muted)' 
-                  }} 
-                />
-                <input
-                  id="birthDate"
-                  type="date"
-                  className="form-control"
-                  value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                  style={{ paddingLeft: '2.5rem' }}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="role">
-                Tipo de Usuário
-              </label>
-              <select
-                id="role"
-                className="form-control"
-                value={role}
-                onChange={(e) => setRole(e.target.value as any)}
-              >
-                <option value="aluno">Aluno</option>
-                <option value="instrutor">Instrutor</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
 
             <button
               type="submit"
