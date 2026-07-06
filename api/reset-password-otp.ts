@@ -22,10 +22,10 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed. Must be POST.' });
   }
 
-  const { phone, code, password } = req.body || {};
+  const { email, code, password } = req.body || {};
 
-  if (!phone || !code || !password) {
-    return res.status(400).json({ error: 'Falta telefone, código ou nova senha.' });
+  if (!email || !code || !password) {
+    return res.status(400).json({ error: 'Falta e-mail, código ou nova senha.' });
   }
 
   if (password.length < 6) {
@@ -40,10 +40,31 @@ export default async function handler(req: any, res: any) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const cleanPhone = formatBrazilianPhone(phone);
 
   try {
-    // 1. Verify OTP
+    // 1. Find user in auth.users by email
+    const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers();
+    if (usersError) throw usersError;
+
+    const authUser = usersData.users.find(u => u.email?.toLowerCase() === email.trim().toLowerCase());
+    if (!authUser) {
+      return res.status(404).json({ error: 'Nenhum usuário cadastrado com este e-mail.' });
+    }
+
+    // 2. Find profile in public.perfis to get their phone number
+    const { data: profile, error: profileError } = await supabase
+      .from('perfis')
+      .select('telefone')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profileError || !profile || !profile.telefone) {
+      return res.status(404).json({ error: 'Usuário encontrado, mas não possui telefone no perfil.' });
+    }
+
+    const cleanPhone = formatBrazilianPhone(profile.telefone);
+
+    // 3. Verify OTP
     const { data: otpData, error: otpError } = await supabase
       .from('otps')
       .select('*')
@@ -67,20 +88,8 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Código de verificação incorreto.' });
     }
 
-    // 2. Find user profile by phone number
-    const { data: profiles, error: profileError } = await supabase
-      .from('perfis')
-      .select('id')
-      .eq('telefone', cleanPhone);
-
-    if (profileError || !profiles || profiles.length === 0) {
-      return res.status(404).json({ error: 'Nenhum usuário encontrado com este número de telefone.' });
-    }
-
-    const userId = profiles[0].id;
-
-    // 3. Update user password in auth.users via admin API
-    const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+    // 4. Update user password in auth.users via admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(authUser.id, {
       password: password
     });
 
@@ -88,7 +97,7 @@ export default async function handler(req: any, res: any) {
       throw updateError;
     }
 
-    // 4. Delete the used OTP code
+    // 5. Delete the used OTP code
     await supabase.from('otps').delete().eq('telefone', cleanPhone);
 
     return res.status(200).json({ success: true, message: 'Senha redefinida com sucesso!' });
