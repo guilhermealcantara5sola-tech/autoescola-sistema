@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Phone, ArrowLeft, Send, Lock } from 'lucide-react';
+import { Mail, ArrowLeft, Send, Lock } from 'lucide-react';
 
 export const ForgotPassword: React.FC = () => {
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState(''); // Retrieved from backend, hidden
+  const [maskedPhone, setMaskedPhone] = useState(''); // Retrieved from backend, shown
   const [otpCode, setOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,43 +25,28 @@ export const ForgotPassword: React.FC = () => {
   
   const navigate = useNavigate();
 
-  const formatBrazilianPhone = (p: string) => {
-    let clean = p.replace(/\D/g, '');
-    if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
-      clean = clean.substring(2);
-    }
-    if (clean.length === 11) {
-      const ddd = parseInt(clean.substring(0, 2), 10);
-      const leadingNine = clean.charAt(2);
-      if (ddd >= 31 && leadingNine === '9') {
-        clean = clean.substring(0, 2) + clean.substring(3);
-      }
-    }
-    return `+55${clean}`;
-  };
-
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phone) return;
+    if (!email) return;
     setSendingOtp(true);
     setError(null);
     setOtpError(null);
     setOtpSuccess(null);
     
     try {
-      const formattedPhone = formatBrazilianPhone(phone);
-      const response = await fetch('/api/send-otp', {
+      const response = await fetch('/api/send-reset-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone }),
+        body: JSON.stringify({ email: email.trim() }),
       });
       const data = await response.json();
       if (response.ok) {
+        setPhone(data.phone);
+        setMaskedPhone(data.maskedPhone);
         setOtpSent(true);
-        setOtpSuccess('Código enviado para o seu WhatsApp!');
+        setOtpSuccess('Código de segurança enviado ao seu WhatsApp!');
       } else {
-        setError(data.error || 'Erro ao enviar código. Verifique se digitou o número correto.');
-        alert('Erro ao enviar código: ' + (data.error || 'Verifique se rodou a tabela otps no Supabase.'));
+        setError(data.error || 'Erro ao processar solicitação de recuperação.');
       }
     } catch (err: any) {
       setError('Erro de conexão ao enviar código.');
@@ -76,11 +63,10 @@ export const ForgotPassword: React.FC = () => {
     setOtpError(null);
     
     try {
-      const formattedPhone = formatBrazilianPhone(phone);
       const response = await fetch('/api/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone, code: otpCode }),
+        body: JSON.stringify({ phone, code: otpCode }),
       });
       const data = await response.json();
       if (response.ok && data.verified) {
@@ -111,11 +97,10 @@ export const ForgotPassword: React.FC = () => {
     setError(null);
 
     try {
-      const formattedPhone = formatBrazilianPhone(phone);
       const response = await fetch('/api/reset-password-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone, code: otpCode, password: newPassword }),
+        body: JSON.stringify({ phone, code: otpCode, password: newPassword }),
       });
       const data = await response.json();
       if (response.ok) {
@@ -162,15 +147,15 @@ export const ForgotPassword: React.FC = () => {
             </div>
           )}
 
-          {/* Passo 1: Digitar Telefone */}
+          {/* Passo 1: Digitar Email */}
           {!otpSent && !otpVerified && (
             <form onSubmit={handleSendOtp}>
               <div className="form-group">
-                <label className="form-label" htmlFor="phone">
-                  Telefone (WhatsApp)
+                <label className="form-label" htmlFor="email">
+                  Seu E-mail Cadastrado
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <Phone 
+                  <Mail 
                     size={18} 
                     style={{ 
                       position: 'absolute', 
@@ -181,12 +166,12 @@ export const ForgotPassword: React.FC = () => {
                     }} 
                   />
                   <input
-                    id="phone"
-                    type="tel"
+                    id="email"
+                    type="email"
                     className="form-control"
-                    placeholder="DDD e número (Ex: 3397054462)"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="exemplo@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     style={{ paddingLeft: '2.5rem' }}
                     required
                   />
@@ -197,14 +182,14 @@ export const ForgotPassword: React.FC = () => {
                 type="submit"
                 className="btn btn-primary"
                 style={{ width: '100%', marginTop: '1rem', height: '45px' }}
-                disabled={sendingOtp || !phone}
+                disabled={sendingOtp || !email}
               >
                 {sendingOtp ? (
-                  <span>Enviando código...</span>
+                  <span>Buscando conta...</span>
                 ) : (
                   <>
                     <Send size={18} />
-                    <span>Enviar Código por WhatsApp</span>
+                    <span>Recuperar via WhatsApp</span>
                   </>
                 )}
               </button>
@@ -216,7 +201,8 @@ export const ForgotPassword: React.FC = () => {
             <form onSubmit={handleVerifyOtp}>
               <div className="form-group">
                 <p style={{ fontSize: '0.85rem', color: 'var(--muted)', textAlign: 'center', marginBottom: '1rem' }}>
-                  Enviamos um código de segurança de 6 dígitos para o WhatsApp <strong>{phone}</strong>.
+                  Enviamos um código de segurança de 6 dígitos para o WhatsApp cadastrado:<br/>
+                  <strong style={{ color: 'var(--primary)', fontSize: '1rem' }}>{maskedPhone}</strong>
                 </p>
                 <label className="form-label" htmlFor="otpCode">
                   Código de Confirmação

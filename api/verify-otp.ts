@@ -47,9 +47,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Código incorreto. Tente novamente.' });
     }
 
-    // Success! Delete the OTP code from DB so it cannot be used again
-    await supabase.from('otps').delete().eq('telefone', cleanPhone);
-
+    // Success! We keep the OTP for the next step where it will be verified and deleted.
     return res.status(200).json({ success: true, verified: true });
   } catch (err: any) {
     console.error('Internal OTP verification error:', err);
