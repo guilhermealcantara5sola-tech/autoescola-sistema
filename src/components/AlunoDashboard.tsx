@@ -35,6 +35,7 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
   const [dataAula, setDataAula] = useState('');
   const [horaInicio, setHoraInicio] = useState('');
   const [disponibilidades, setDisponibilidades] = useState<string[]>([]);
+  const [filaEspera, setFilaEspera] = useState<string[]>([]);
   const [loadingDisp, setLoadingDisp] = useState(false);
 
   // Database options
@@ -141,6 +142,7 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
   const fetchAvailableSlots = async () => {
     if (!selectedInstrutor || !dataAula) {
       setDisponibilidades([]);
+      setFilaEspera([]);
       return;
     }
     setLoadingDisp(true);
@@ -156,21 +158,29 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
 
       const { data: booked, error: bookedErr } = await supabase
         .from('agendamentos')
-        .select('hora_inicio')
+        .select('hora_inicio, status')
         .eq('instrutor_id', selectedInstrutor)
-        .eq('data', dataAula)
-        .not('status', 'eq', 'cancelado');
+        .eq('data', dataAula);
 
       if (bookedErr) throw bookedErr;
 
-      const bookedHours = (booked || []).map(b => b.hora_inicio.substring(0, 5));
-      const availableHours = (slots || [])
-        .map(s => s.hora_inicio.substring(0, 5))
-        .filter(h => !bookedHours.includes(h));
+      // Filter active (non-cancelled and non-waitlist) bookings
+      const activeBookedHours = (booked || [])
+        .filter(b => b.status !== 'cancelado' && b.status !== 'reserva')
+        .map(b => b.hora_inicio.substring(0, 5));
+
+      const allSlots = (slots || []).map(s => s.hora_inicio.substring(0, 5));
+
+      const availableHours = allSlots.filter(h => !activeBookedHours.includes(h));
+      const busyHours = allSlots.filter(h => activeBookedHours.includes(h));
 
       setDisponibilidades(availableHours);
+      setFilaEspera(busyHours);
+
       if (availableHours.length > 0) {
         setHoraInicio(availableHours[0]);
+      } else if (busyHours.length > 0) {
+        setHoraInicio(busyHours[0]);
       } else {
         setHoraInicio('');
       }
@@ -197,39 +207,43 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
     const horaInicioFormatted = `${horaInicio}:00`;
 
     try {
-      // 1. Verify Instructor Conflict (Double Booking)
-      const { data: instrutorConflict, error: instError } = await supabase
-        .from('agendamentos')
-        .select('id')
-        .eq('instrutor_id', selectedInstrutor)
-        .eq('data', dataAula)
-        .eq('hora_inicio', horaInicioFormatted)
-        .not('status', 'eq', 'cancelado');
+      const isWaitlist = filaEspera.includes(horaInicio);
 
-      if (instError) throw instError;
-
-      if (instrutorConflict && instrutorConflict.length > 0) {
-        setErrorMsg('Este instrutor já tem uma aula agendada para este dia e horário.');
-        setSubmitting(false);
-        return;
-      }
-
-      // 2. Verify Vehicle Conflict (Double Booking for practical classes)
-      if (tipoAula !== 'teorica' && selectedVeiculo) {
-        const { data: veiculoConflict, error: vecError } = await supabase
+      if (!isWaitlist) {
+        // 1. Verify Instructor Conflict (Double Booking)
+        const { data: instrutorConflict, error: instError } = await supabase
           .from('agendamentos')
           .select('id')
-          .eq('veiculo_id', selectedVeiculo)
+          .eq('instrutor_id', selectedInstrutor)
           .eq('data', dataAula)
           .eq('hora_inicio', horaInicioFormatted)
           .not('status', 'eq', 'cancelado');
 
-        if (vecError) throw vecError;
+        if (instError) throw instError;
 
-        if (veiculoConflict && veiculoConflict.length > 0) {
-          setErrorMsg('Este veículo já está agendado para outra aula neste mesmo horário.');
+        if (instrutorConflict && instrutorConflict.length > 0) {
+          setErrorMsg('Este instrutor já tem uma aula agendada para este dia e horário.');
           setSubmitting(false);
           return;
+        }
+
+        // 2. Verify Vehicle Conflict (Double Booking for practical classes)
+        if (tipoAula !== 'teorica' && selectedVeiculo) {
+          const { data: veiculoConflict, error: vecError } = await supabase
+            .from('agendamentos')
+            .select('id')
+            .eq('veiculo_id', selectedVeiculo)
+            .eq('data', dataAula)
+            .eq('hora_inicio', horaInicioFormatted)
+            .not('status', 'eq', 'cancelado');
+
+          if (vecError) throw vecError;
+
+          if (veiculoConflict && veiculoConflict.length > 0) {
+            setErrorMsg('Este veículo já está agendado para outra aula neste mesmo horário.');
+            setSubmitting(false);
+            return;
+          }
         }
       }
 
@@ -241,7 +255,7 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
         hora_inicio: horaInicioFormatted,
         hora_fim: horaFim,
         tipo_aula: tipoAula,
-        status: 'pendente',
+        status: isWaitlist ? 'reserva' : 'pendente',
         whatsapp_status: 'nao_enviado',
       });
 
@@ -501,14 +515,27 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
                     value={horaInicio}
                     onChange={(e) => setHoraInicio(e.target.value)}
                     required
-                    disabled={!dataAula || disponibilidades.length === 0}
+                    disabled={!dataAula || (disponibilidades.length === 0 && filaEspera.length === 0)}
                   >
                     {!dataAula ? (
                       <option value="">Selecione uma data primeiro</option>
-                    ) : disponibilidades.length > 0 ? (
-                      disponibilidades.map(h => (
-                        <option key={h} value={h}>{h} (Duração: 1h)</option>
-                      ))
+                    ) : (disponibilidades.length > 0 || filaEspera.length > 0) ? (
+                      <>
+                        {disponibilidades.length > 0 && (
+                          <optgroup label="Horários Livres">
+                            {disponibilidades.map(h => (
+                              <option key={h} value={h}>{h} (Disponível)</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {filaEspera.length > 0 && (
+                          <optgroup label="Fila de Espera (Reserva)">
+                            {filaEspera.map(h => (
+                              <option key={h} value={h}>{h} (Fila de Espera)</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
                     ) : (
                       <option value="">Nenhum horário liberado pelo instrutor para esta data</option>
                     )}
@@ -571,9 +598,9 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
                   type="submit" 
                   className="btn btn-primary" 
                   style={{ flex: 1 }}
-                  disabled={submitting || !horaInicio || disponibilidades.length === 0}
+                  disabled={submitting || !horaInicio || (disponibilidades.length === 0 && filaEspera.length === 0)}
                 >
-                  {submitting ? 'Reservando...' : 'Confirmar Agendamento'}
+                  {submitting ? 'Reservando...' : filaEspera.includes(horaInicio) ? 'Entrar na Fila de Espera' : 'Confirmar Agendamento'}
                 </button>
               </div>
 

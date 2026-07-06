@@ -179,7 +179,7 @@ export default async function handler(req: any, res: any) {
             })
             .eq('id', item.id);
 
-          results.push({ id: item.id, student: rawName, phone: phone, status: 'sent', sid: json.sid });
+          results.push({ id: item.id, student: rawName, phone: cleanPhone, status: 'sent', sid: json.sid });
         } else {
           console.error(`Twilio Error for student ${rawName}:`, json);
           await supabase

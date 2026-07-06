@@ -94,7 +94,7 @@ export default async function handler(req: any, res: any) {
 
     const { data: agendamentos, error: classError } = await supabase
       .from('agendamentos')
-      .select('id, data, hora_inicio, status, tipo_aula')
+      .select('id, data, hora_inicio, status, tipo_aula, instrutor_id')
       .eq('aluno_id', profile.id)
       .gte('data', todayStr)
       .in('status', ['pendente', 'confirmado'])
@@ -144,6 +144,80 @@ export default async function handler(req: any, res: any) {
         .eq('id', agendamento.id);
 
       if (updateError) throw updateError;
+
+      // =========================================================================
+      // WAITING LIST (FILA DE ESPERA) AUTO-PROMOTION LOGIC
+      // =========================================================================
+      try {
+        const { data: waitlist, error: waitError } = await supabase
+          .from('agendamentos')
+          .select(`
+            id,
+            aluno:aluno_id ( nome_completo, telefone )
+          `)
+          .eq('instrutor_id', agendamento.instrutor_id)
+          .eq('data', agendamento.data)
+          .eq('hora_inicio', agendamento.hora_inicio)
+          .eq('status', 'reserva')
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        if (!waitError && waitlist && waitlist.length > 0) {
+          const nextInLine = waitlist[0];
+          const nextAluno = Array.isArray(nextInLine.aluno) ? nextInLine.aluno[0] : nextInLine.aluno;
+          
+          if (nextAluno && nextAluno.telefone) {
+            // Promote next student to 'pendente'
+            await supabase
+              .from('agendamentos')
+              .update({ status: 'pendente' })
+              .eq('id', nextInLine.id);
+
+            // Format phone number
+            const cleanNextPhone = formatBrazilianPhone(nextAluno.telefone);
+            const nextFormattedPhone = `whatsapp:${cleanNextPhone}`;
+
+            // Send Twilio notification to waitlisted student
+            const accountSid = process.env.TWILIO_ACCOUNT_SID;
+            const authToken = process.env.TWILIO_AUTH_TOKEN;
+            const senderNumber = process.env.TWILIO_SENDER_NUMBER || 'whatsapp:+14155238886';
+            
+            if (accountSid && authToken) {
+              const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+              const params = new URLSearchParams();
+              params.append('To', nextFormattedPhone);
+              params.append('From', senderNumber);
+              
+              let classTypeLabel = '';
+              if (agendamento.tipo_aula === 'pratica_carro') classTypeLabel = 'Prática de Carro';
+              else if (agendamento.tipo_aula === 'pratica_moto') classTypeLabel = 'Prática de Moto';
+              else classTypeLabel = 'Teórica';
+
+              const formattedDate = new Date(agendamento.data + 'T12:00:00').toLocaleDateString('pt-BR');
+              const hora = agendamento.hora_inicio.substring(0, 5);
+
+              params.append('Body', `Olá *${nextAluno.nome_completo.split(' ')[0]}*! O horário das *${hora}* no dia *${formattedDate}* ficou livre e você foi promovido da Fila de Espera para a aula de *${classTypeLabel}*! Responda *1* para confirmar ou *2* para recusar.`);
+
+              await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': authHeader,
+                  'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: params.toString()
+              });
+              
+              // Set their whatsapp status to sent
+              await supabase
+                .from('agendamentos')
+                .update({ whatsapp_status: 'enviado' })
+                .eq('id', nextInLine.id);
+            }
+          }
+        }
+      } catch (waitlistErr) {
+        console.error('Waitlist promotion error:', waitlistErr);
+      }
 
       console.log(`Class ${agendamento.id} successfully CANCELLED by student.`);
       return sendTwiMLReply(

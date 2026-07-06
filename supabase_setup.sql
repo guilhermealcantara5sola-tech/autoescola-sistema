@@ -49,7 +49,7 @@ create table if not exists public.agendamentos (
     hora_inicio time not null,
     hora_fim time not null,
     tipo_aula text not null check (tipo_aula in ('pratica_carro', 'pratica_moto', 'teorica')),
-    status text default 'pendente' not null check (status in ('pendente', 'confirmado', 'cancelado', 'realizado')),
+    status text default 'pendente' not null check (status in ('pendente', 'confirmado', 'cancelado', 'realizado', 'reserva')),
     whatsapp_status text default 'nao_enviado' not null check (whatsapp_status in ('nao_enviado', 'enviado', 'confirmado_aluno', 'recusado_aluno', 'erro')),
     mensagem_sid text,
     whatsapp_antecedencia integer default null,
@@ -58,6 +58,10 @@ create table if not exists public.agendamentos (
 
 -- Garantir que a coluna whatsapp_antecedencia exista se a tabela já tiver sido criada antes
 alter table public.agendamentos add column if not exists whatsapp_antecedencia integer default null;
+
+-- Atualizar o check constraint da coluna status para aceitar 'reserva' (Fila de Espera)
+alter table public.agendamentos drop constraint if exists agendamentos_status_check;
+alter table public.agendamentos add constraint agendamentos_status_check check (status in ('pendente', 'confirmado', 'cancelado', 'realizado', 'reserva'));
 
 -- =========================================================================
 -- 2. TRIGGER DE SINCRONIZAÇÃO DE USUÁRIOS (AUTH -> PUBLIC)
