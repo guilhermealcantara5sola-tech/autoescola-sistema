@@ -109,7 +109,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       const { data, error } = await supabase
         .from('agendamentos')
         .select(`
-          id, data, hora_inicio, hora_fim, tipo_aula, status, whatsapp_status, whatsapp_antecedencia,
+          *,
           aluno:aluno_id ( nome_completo ),
           instrutor:instrutor_id ( nome_completo ),
           veiculo:veiculo_id ( modelo, placa )
