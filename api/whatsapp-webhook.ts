@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { createClient } from '@supabase/supabase-js';
 
 // Helper to return a TwiML XML response to reply to the user's WhatsApp message instantly

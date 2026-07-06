@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req: any, res: any) {
@@ -156,7 +157,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       message: 'Processing finished.',
-      date: tomorrowStr,
+      date: targetDateStr || undefined,
       results
     });
 
