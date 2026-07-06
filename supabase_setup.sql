@@ -171,3 +171,35 @@ insert into public.veiculos (modelo, placa, tipo, ativo) values
 ('Honda CG 160 Fan (Moto A)', 'MNO-9012', 'moto', true),
 ('Yamaha YBR 150 Factor (Moto B)', 'PQR-3456', 'moto', true)
 on conflict (placa) do nothing;
+
+-- =========================================================================
+-- 5. TABELA DE CONFIGURAÇÕES GERAIS DO SISTEMA
+-- =========================================================================
+
+create table if not exists public.configuracoes (
+    chave text primary key,
+    valor text not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Habilitar RLS
+alter table public.configuracoes enable row level security;
+
+-- Políticas de RLS para Configurações
+drop policy if exists "Qualquer um logado pode ver configurações" on public.configuracoes;
+create policy "Qualquer um logado pode ver configurações" on public.configuracoes
+    for select using (auth.role() = 'authenticated');
+
+drop policy if exists "Apenas admins controlam configurações" on public.configuracoes;
+create policy "Apenas admins controlam configurações" on public.configuracoes
+    for all using (
+        exists (
+            select 1 from public.perfis 
+            where id = auth.uid() and tipo = 'admin'
+        )
+    );
+
+-- Inserir valor padrão (24 horas de antecedência)
+insert into public.configuracoes (chave, valor) values
+('whatsapp_antecedencia', '24')
+on conflict (chave) do nothing;

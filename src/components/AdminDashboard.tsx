@@ -63,6 +63,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [whatsappResult, setWhatsappResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [sendingIndividualId, setSendingIndividualId] = useState<string | null>(null);
+  const [antecedencia, setAntecedencia] = useState('24');
 
   const fetchMetrics = async () => {
     try {
@@ -163,13 +164,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('configuracoes')
+        .select('*')
+        .eq('chave', 'whatsapp_antecedencia')
+        .single();
+      if (data) {
+        setAntecedencia(data.valor);
+      } else {
+        const localVal = localStorage.getItem('whatsapp_antecedencia') || '24';
+        setAntecedencia(localVal);
+      }
+    } catch (err) {
+      const localVal = localStorage.getItem('whatsapp_antecedencia') || '24';
+      setAntecedencia(localVal);
+    }
+  };
+
+  const handleSaveAntecedencia = async (val: string) => {
+    setAntecedencia(val);
+    localStorage.setItem('whatsapp_antecedencia', val);
+    try {
+      await supabase
+        .from('configuracoes')
+        .upsert({ chave: 'whatsapp_antecedencia', valor: val });
+    } catch (err) {
+      console.error('Erro ao salvar no banco:', err);
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     await Promise.all([
       fetchMetrics(),
       fetchAgendamentos(),
       fetchVeiculos(),
-      fetchInstrutores()
+      fetchInstrutores(),
+      fetchSettings()
     ]);
     setLoading(false);
   };
@@ -476,6 +509,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   {whatsappResult.message}
                 </div>
               )}
+
+              <div style={{ 
+                borderTop: '1px solid var(--border)', 
+                paddingTop: '1rem', 
+                marginTop: '0.5rem', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '0.5rem' 
+              }}>
+                <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                  Tempo de antecedência para disparo automático:
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <select
+                    value={antecedencia}
+                    onChange={(e) => handleSaveAntecedencia(e.target.value)}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="1">1 hora antes da aula</option>
+                    <option value="2">2 horas antes da aula</option>
+                    <option value="5">5 horas antes da aula</option>
+                    <option value="12">12 horas antes da aula</option>
+                    <option value="24">24 horas antes (1 dia)</option>
+                    <option value="48">48 horas antes (2 dias)</option>
+                  </select>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+                    (Determina quando as notificações automáticas do sistema serão enviadas).
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -37,16 +37,65 @@ export default async function handler(req: any, res: any) {
       console.log(`Sending single WhatsApp notification for booking ID: ${agendamentoId}`);
       query = query.eq('id', agendamentoId);
     } else {
-      // 1. Calculate tomorrow's date in Brazil Timezone (UTC-3)
-      const targetDate = new Date();
-      targetDate.setHours(targetDate.getHours() - 3 + 24);
-      targetDateStr = targetDate.toISOString().split('T')[0];
+      // Get the configured lead hours from the database
+      let leadHours = 24;
+      try {
+        const { data: configData } = await supabase
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', 'whatsapp_antecedencia')
+          .single();
+        if (configData && configData.valor) {
+          leadHours = parseInt(configData.valor, 10);
+        }
+      } catch (e) {
+        console.log('Using default 24h lead time (table configuracoes not found or error)');
+      }
 
-      console.log(`Scanning database for classes scheduled on: ${targetDateStr}`);
-      query = query
-        .eq('data', targetDateStr)
-        .in('status', ['pendente', 'confirmado'])
-        .in('whatsapp_status', ['nao_enviado', 'erro']);
+      console.log(`Calculating target time window for ${leadHours} hours ahead.`);
+
+      if (leadHours >= 24) {
+        // Day-based search (e.g. 24h or 48h before)
+        const targetDate = new Date();
+        targetDate.setHours(targetDate.getHours() - 3 + leadHours);
+        targetDateStr = targetDate.toISOString().split('T')[0];
+
+        console.log(`Scanning database for classes scheduled on date: ${targetDateStr}`);
+        query = query
+          .eq('data', targetDateStr)
+          .in('status', ['pendente', 'confirmado'])
+          .in('whatsapp_status', ['nao_enviado', 'erro']);
+      } else {
+        // Hour-based search (e.g. 1h, 2h, 5h, 12h before)
+        const nowInBrazil = new Date();
+        nowInBrazil.setHours(nowInBrazil.getHours() - 3); // BR Time
+
+        const targetTimeMin = new Date(nowInBrazil.getTime() + (leadHours - 0.5) * 60 * 60 * 1000);
+        const targetTimeMax = new Date(nowInBrazil.getTime() + (leadHours + 0.5) * 60 * 60 * 1000);
+
+        const targetDateMinStr = targetTimeMin.toISOString().split('T')[0];
+        const targetDateMaxStr = targetTimeMax.toISOString().split('T')[0];
+
+        const timeMinStr = targetTimeMin.toTimeString().split(' ')[0]; // HH:MM:SS
+        const timeMaxStr = targetTimeMax.toTimeString().split(' ')[0]; // HH:MM:SS
+
+        console.log(`Scanning for classes starting between ${timeMinStr} and ${timeMaxStr} on date ${targetDateMinStr}`);
+
+        if (targetDateMinStr === targetDateMaxStr) {
+          query = query
+            .eq('data', targetDateMinStr)
+            .gte('hora_inicio', timeMinStr)
+            .lte('hora_inicio', timeMaxStr)
+            .in('status', ['pendente', 'confirmado'])
+            .in('whatsapp_status', ['nao_enviado', 'erro']);
+        } else {
+          // Window spans across midnight (e.g., Min is today 23:30, Max is tomorrow 00:30)
+          query = query
+            .or(`and(data.eq.${targetDateMinStr},hora_inicio.gte.${timeMinStr}),and(data.eq.${targetDateMaxStr},hora_inicio.lte.${timeMaxStr})`)
+            .in('status', ['pendente', 'confirmado'])
+            .in('whatsapp_status', ['nao_enviado', 'erro']);
+        }
+      }
     }
 
     const { data: agendamentos, error: dbError } = await query;
