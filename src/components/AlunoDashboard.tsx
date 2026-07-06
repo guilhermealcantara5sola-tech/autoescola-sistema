@@ -33,7 +33,9 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
   const [selectedInstrutor, setSelectedInstrutor] = useState('');
   const [selectedVeiculo, setSelectedVeiculo] = useState('');
   const [dataAula, setDataAula] = useState('');
-  const [horaInicio, setHoraInicio] = useState('08:00');
+  const [horaInicio, setHoraInicio] = useState('');
+  const [disponibilidades, setDisponibilidades] = useState<string[]>([]);
+  const [loadingDisp, setLoadingDisp] = useState(false);
 
   // Database options
   const [instrutores, setInstrutores] = useState<{ id: string; nome_completo: string }[]>([]);
@@ -136,6 +138,53 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
     };
   }, [user.id]);
 
+  const fetchAvailableSlots = async () => {
+    if (!selectedInstrutor || !dataAula) {
+      setDisponibilidades([]);
+      return;
+    }
+    setLoadingDisp(true);
+    try {
+      const { data: slots, error: slotsErr } = await supabase
+        .from('horarios_disponiveis')
+        .select('hora_inicio')
+        .eq('instrutor_id', selectedInstrutor)
+        .eq('data', dataAula)
+        .eq('disponivel', true);
+
+      if (slotsErr) throw slotsErr;
+
+      const { data: booked, error: bookedErr } = await supabase
+        .from('agendamentos')
+        .select('hora_inicio')
+        .eq('instrutor_id', selectedInstrutor)
+        .eq('data', dataAula)
+        .not('status', 'eq', 'cancelado');
+
+      if (bookedErr) throw bookedErr;
+
+      const bookedHours = (booked || []).map(b => b.hora_inicio.substring(0, 5));
+      const availableHours = (slots || [])
+        .map(s => s.hora_inicio.substring(0, 5))
+        .filter(h => !bookedHours.includes(h));
+
+      setDisponibilidades(availableHours);
+      if (availableHours.length > 0) {
+        setHoraInicio(availableHours[0]);
+      } else {
+        setHoraInicio('');
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar horários disponíveis:', err.message);
+    } finally {
+      setLoadingDisp(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableSlots();
+  }, [selectedInstrutor, dataAula]);
+
   const handleAgendar = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -148,6 +197,42 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
     const horaInicioFormatted = `${horaInicio}:00`;
 
     try {
+      // 1. Verify Instructor Conflict (Double Booking)
+      const { data: instrutorConflict, error: instError } = await supabase
+        .from('agendamentos')
+        .select('id')
+        .eq('instrutor_id', selectedInstrutor)
+        .eq('data', dataAula)
+        .eq('hora_inicio', horaInicioFormatted)
+        .not('status', 'eq', 'cancelado');
+
+      if (instError) throw instError;
+
+      if (instrutorConflict && instrutorConflict.length > 0) {
+        setErrorMsg('Este instrutor já tem uma aula agendada para este dia e horário.');
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. Verify Vehicle Conflict (Double Booking for practical classes)
+      if (tipoAula !== 'teorica' && selectedVeiculo) {
+        const { data: veiculoConflict, error: vecError } = await supabase
+          .from('agendamentos')
+          .select('id')
+          .eq('veiculo_id', selectedVeiculo)
+          .eq('data', dataAula)
+          .eq('hora_inicio', horaInicioFormatted)
+          .not('status', 'eq', 'cancelado');
+
+        if (vecError) throw vecError;
+
+        if (veiculoConflict && veiculoConflict.length > 0) {
+          setErrorMsg('Este veículo já está agendado para outra aula neste mesmo horário.');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const { error } = await supabase.from('agendamentos').insert({
         aluno_id: user.id,
         instrutor_id: selectedInstrutor,
@@ -407,21 +492,28 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
               {/* Time selection */}
               <div className="form-group">
                 <label className="form-label" htmlFor="classTime">Horário de Início</label>
-                <select 
-                  id="classTime"
-                  className="form-control"
-                  value={horaInicio}
-                  onChange={(e) => setHoraInicio(e.target.value)}
-                >
-                  <option value="08:00">08:00 (Duração: 1h)</option>
-                  <option value="09:00">09:00 (Duração: 1h)</option>
-                  <option value="10:00">10:00 (Duração: 1h)</option>
-                  <option value="11:00">11:00 (Duração: 1h)</option>
-                  <option value="13:00">13:00 (Duração: 1h)</option>
-                  <option value="14:00">14:00 (Duração: 1h)</option>
-                  <option value="15:00">15:00 (Duração: 1h)</option>
-                  <option value="16:00">16:00 (Duração: 1h)</option>
-                </select>
+                {loadingDisp ? (
+                  <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Buscando horários disponíveis...</p>
+                ) : (
+                  <select 
+                    id="classTime"
+                    className="form-control"
+                    value={horaInicio}
+                    onChange={(e) => setHoraInicio(e.target.value)}
+                    required
+                    disabled={!dataAula || disponibilidades.length === 0}
+                  >
+                    {!dataAula ? (
+                      <option value="">Selecione uma data primeiro</option>
+                    ) : disponibilidades.length > 0 ? (
+                      disponibilidades.map(h => (
+                        <option key={h} value={h}>{h} (Duração: 1h)</option>
+                      ))
+                    ) : (
+                      <option value="">Nenhum horário liberado pelo instrutor para esta data</option>
+                    )}
+                  </select>
+                )}
               </div>
 
               {/* Instructor selection */}
@@ -479,7 +571,7 @@ export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
                   type="submit" 
                   className="btn btn-primary" 
                   style={{ flex: 1 }}
-                  disabled={submitting}
+                  disabled={submitting || !horaInicio || disponibilidades.length === 0}
                 >
                   {submitting ? 'Reservando...' : 'Confirmar Agendamento'}
                 </button>

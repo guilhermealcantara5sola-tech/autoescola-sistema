@@ -27,6 +27,79 @@ export const InstrutorDashboard: React.FC<InstrutorDashboardProps> = ({ user }) 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  const [dispDate, setDispDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dispHora, setDispHora] = useState('08:00');
+  const [myDisponibilidades, setMyDisponibilidades] = useState<any[]>([]);
+  const [addingDisp, setAddingDisp] = useState(false);
+  const [loadingDisp, setLoadingDisp] = useState(false);
+
+  const fetchMyDisponibilidades = async () => {
+    setLoadingDisp(true);
+    try {
+      const { data, error } = await supabase
+        .from('horarios_disponiveis')
+        .select('*')
+        .eq('instrutor_id', user.id)
+        .eq('data', dispDate)
+        .order('hora_inicio', { ascending: true });
+
+      if (error) throw error;
+      setMyDisponibilidades(data || []);
+    } catch (err: any) {
+      console.error('Erro ao buscar disponibilidades:', err.message);
+    } finally {
+      setLoadingDisp(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyDisponibilidades();
+  }, [user.id, dispDate]);
+
+  const handleAddDisp = async () => {
+    setAddingDisp(true);
+    try {
+      const hora_inicio_formatted = `${dispHora}:00`;
+      
+      const { error } = await supabase
+        .from('horarios_disponiveis')
+        .insert({
+          instrutor_id: user.id,
+          data: dispDate,
+          hora_inicio: hora_inicio_formatted,
+          disponivel: true
+        });
+
+      if (error) {
+        if (error.code === '23505') {
+          alert('Este horário já está cadastrado como disponível para este dia.');
+        } else {
+          throw error;
+        }
+      } else {
+        fetchMyDisponibilidades();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Erro ao adicionar disponibilidade.');
+    } finally {
+      setAddingDisp(false);
+    }
+  };
+
+  const handleRemoveDisp = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('horarios_disponiveis')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      fetchMyDisponibilidades();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao remover disponibilidade.');
+    }
+  };
+
   const fetchAgenda = async () => {
     setLoading(true);
     try {
@@ -276,6 +349,110 @@ export const InstrutorDashboard: React.FC<InstrutorDashboardProps> = ({ user }) 
             Nenhuma aula agendada para este dia.
           </div>
         )}
+      </div>
+
+      {/* Available Slots Manager */}
+      <div className="card" style={{ padding: '1.5rem', textAlign: 'left', marginTop: '2rem' }}>
+        <h4 style={{ marginBottom: '0.25rem', fontWeight: 600, color: 'var(--foreground)' }}>Gerenciar Minha Disponibilidade</h4>
+        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
+          Defina os dias e horários que você estará disponível para dar aulas. Os alunos só poderão agendar nos horários listados aqui.
+        </p>
+
+        <div className="grid-cols-2" style={{ gridTemplateColumns: '1.5fr 1.5fr', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" htmlFor="dispDateSelector">Selecione o Dia</label>
+            <input 
+              id="dispDateSelector"
+              type="date"
+              className="form-control"
+              value={dispDate}
+              onChange={(e) => setDispDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+            />
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" htmlFor="dispHoraSelector">Escolha o Horário de Início</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <select 
+                id="dispHoraSelector"
+                className="form-control"
+                value={dispHora}
+                onChange={(e) => setDispHora(e.target.value)}
+                style={{ flex: 1 }}
+              >
+                <option value="08:00">08:00 (1h)</option>
+                <option value="09:00">09:00 (1h)</option>
+                <option value="10:00">10:00 (1h)</option>
+                <option value="11:00">11:00 (1h)</option>
+                <option value="13:00">13:00 (1h)</option>
+                <option value="14:00">14:00 (1h)</option>
+                <option value="15:00">15:00 (1h)</option>
+                <option value="16:00">16:00 (1h)</option>
+              </select>
+              <button 
+                type="button"
+                onClick={handleAddDisp}
+                disabled={addingDisp}
+                className="btn btn-primary"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {addingDisp ? 'Adicionando...' : 'Liberar Horário'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+          <h5 style={{ fontWeight: 600, marginBottom: '1rem' }}>
+            Horários Liberados para {new Date(dispDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+          </h5>
+
+          {loadingDisp ? (
+            <p style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>Carregando disponibilidades...</p>
+          ) : myDisponibilidades.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {myDisponibilidades.map(d => (
+                <div 
+                  key={d.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.4rem 0.75rem',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                    {d.hora_inicio.substring(0, 5)}
+                  </span>
+                  <button 
+                    onClick={() => handleRemoveDisp(d.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--error-text)',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                      lineHeight: 1,
+                      padding: 0
+                    }}
+                    title="Remover horário"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>
+              Nenhum horário liberado por você para este dia. Os alunos não poderão agendar aulas com você nesta data.
+            </p>
+          )}
+        </div>
       </div>
 
     </div>

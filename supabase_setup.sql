@@ -220,3 +220,34 @@ create table if not exists public.otps (
 
 -- Habilitar RLS
 alter table public.otps enable row level security;
+
+-- =========================================================================
+-- 7. TABELA DE DISPONIBILIDADE DOS INSTRUTORES (SLOTS)
+-- =========================================================================
+
+create table if not exists public.horarios_disponiveis (
+    id uuid default uuid_generate_v4() primary key,
+    instrutor_id uuid references public.perfis(id) on delete cascade not null,
+    data date not null,
+    hora_inicio time not null,
+    disponivel boolean default true not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique(instrutor_id, data, hora_inicio)
+);
+
+-- Habilitar RLS
+alter table public.horarios_disponiveis enable row level security;
+
+-- Políticas de RLS
+drop policy if exists "Qualquer um logado pode ver disponibilidades" on public.horarios_disponiveis;
+create policy "Qualquer um logado pode ver disponibilidades" on public.horarios_disponiveis
+    for select using (auth.role() = 'authenticated');
+
+drop policy if exists "Instrutores e admins podem gerenciar disponibilidades" on public.horarios_disponiveis;
+create policy "Instrutores e admins podem gerenciar disponibilidades" on public.horarios_disponiveis
+    for all using (
+        exists (
+            select 1 from public.perfis 
+            where id = auth.uid() and (tipo = 'instrutor' or tipo = 'admin')
+        )
+    );
