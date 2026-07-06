@@ -46,7 +46,7 @@ export default async function handler(req: any, res: any) {
     const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers();
     if (usersError) throw usersError;
 
-    const authUser = usersData.users.find(u => u.email?.toLowerCase() === email.trim().toLowerCase());
+    const authUser = (usersData.users as any[]).find((u: any) => u.email?.toLowerCase() === email.trim().toLowerCase());
     if (!authUser) {
       return res.status(404).json({ error: 'Nenhum usuário cadastrado com este e-mail.' });
     }
