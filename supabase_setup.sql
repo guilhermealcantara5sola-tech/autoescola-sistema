@@ -207,3 +207,16 @@ create policy "Apenas admins controlam configurações" on public.configuracoes
 insert into public.configuracoes (chave, valor) values
 ('whatsapp_antecedencia', '24')
 on conflict (chave) do nothing;
+
+-- =========================================================================
+-- 6. TABELA DE CÓDIGOS DE VERIFICAÇÃO WHATSAPP (OTP)
+-- =========================================================================
+
+create table if not exists public.otps (
+    telefone text primary key,
+    codigo text not null,
+    expira_em timestamp with time zone not null
+);
+
+-- Habilitar RLS
+alter table public.otps enable row level security;

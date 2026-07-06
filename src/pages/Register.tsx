@@ -15,8 +15,72 @@ export const Register: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
 
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
+
+  const handleSendOtp = async () => {
+    if (!phone) return;
+    setSendingOtp(true);
+    setOtpError(null);
+    setOtpSuccess(null);
+    try {
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setOtpSent(true);
+        setOtpSuccess('Código enviado para o seu WhatsApp!');
+      } else {
+        setOtpError(data.error || 'Erro ao enviar código.');
+      }
+    } catch (err: any) {
+      setOtpError('Erro de conexão ao enviar código.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!phone || !otpCode) return;
+    setVerifyingOtp(true);
+    setOtpError(null);
+    setOtpSuccess(null);
+    try {
+      const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code: otpCode }),
+      });
+      const data = await response.json();
+      if (response.ok && data.verified) {
+        setOtpVerified(true);
+        setOtpSuccess('WhatsApp verificado com sucesso!');
+      } else {
+        setOtpError(data.error || 'Código incorreto ou expirado.');
+      }
+    } catch (err: any) {
+      setOtpError('Erro de conexão ao verificar código.');
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!otpVerified) {
+      setError('Por favor, confirme seu número de telefone via código do WhatsApp antes de realizar o cadastro.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSuccess(false);
@@ -161,12 +225,12 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid-cols-2">
-              <div className="form-group">
-                <label className="form-label" htmlFor="phone">
-                  Telefone (WhatsApp)
-                </label>
-                <div style={{ position: 'relative' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="phone">
+                Telefone (WhatsApp)
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
                   <Phone 
                     size={18} 
                     style={{ 
@@ -181,40 +245,103 @@ export const Register: React.FC = () => {
                     id="phone"
                     type="tel"
                     className="form-control"
-                    placeholder="+5511999999999"
+                    placeholder="DDD e número (Ex: 3397054462)"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    disabled={otpVerified || sendingOtp}
                     style={{ paddingLeft: '2.5rem' }}
                     required
                   />
                 </div>
+                {!otpVerified && (
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={sendingOtp || !phone}
+                    className="btn btn-secondary"
+                    style={{ height: '42px', padding: '0 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                  >
+                    {sendingOtp ? 'Enviando...' : otpSent ? 'Reenviar' : 'Enviar Código'}
+                  </button>
+                )}
+                {otpVerified && (
+                  <span style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--success)',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    gap: '0.25rem',
+                    padding: '0 0.5rem'
+                  }}>
+                    ✅ Verificado
+                  </span>
+                )}
               </div>
+            </div>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="birthDate">
-                  Data de Nascimento
+            {otpSent && !otpVerified && (
+              <div className="form-group fade-in" style={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.02)', 
+                padding: '1rem', 
+                borderRadius: 'var(--radius-md)',
+                border: '1px dashed var(--border)',
+                marginBottom: '1rem'
+              }}>
+                <label className="form-label" htmlFor="otpCode" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                  Insira o código enviado ao seu WhatsApp:
                 </label>
-                <div style={{ position: 'relative' }}>
-                  <Calendar 
-                    size={18} 
-                    style={{ 
-                      position: 'absolute', 
-                      left: '12px', 
-                      top: '50%', 
-                      transform: 'translateY(-50%)', 
-                      color: 'var(--muted)' 
-                    }} 
-                  />
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <input
-                    id="birthDate"
-                    type="date"
+                    id="otpCode"
+                    type="text"
+                    maxLength={6}
                     className="form-control"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    style={{ paddingLeft: '2.5rem' }}
+                    placeholder="Código de 6 dígitos"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    style={{ textAlign: 'center', letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 'bold' }}
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={handleVerifyOtp}
+                    disabled={verifyingOtp || otpCode.length < 6}
+                    className="btn btn-primary"
+                    style={{ height: '42px', padding: '0 1.5rem' }}
+                  >
+                    {verifyingOtp ? 'Verificando...' : 'Confirmar'}
+                  </button>
                 </div>
+                {otpError && <p style={{ color: 'var(--error)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>⚠️ {otpError}</p>}
+                {otpSuccess && <p style={{ color: 'var(--success)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>✅ {otpSuccess}</p>}
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="birthDate">
+                Data de Nascimento
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Calendar 
+                  size={18} 
+                  style={{ 
+                    position: 'absolute', 
+                    left: '12px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)', 
+                    color: 'var(--muted)' 
+                  }} 
+                />
+                <input
+                  id="birthDate"
+                  type="date"
+                  className="form-control"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  style={{ paddingLeft: '2.5rem' }}
+                  required
+                />
               </div>
             </div>
 
