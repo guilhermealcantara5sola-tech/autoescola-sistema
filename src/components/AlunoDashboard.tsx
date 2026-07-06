@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Car, Calendar, Clock, CheckCircle, AlertCircle, Plus, Eye, Loader2 } from 'lucide-react';
+import { Car, Calendar, Clock, CheckCircle, Plus, Loader2 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import type { Profile } from '../contexts/AuthContext';
 
@@ -21,7 +21,7 @@ interface Agendamento {
   veiculo: { modelo: string; placa: string } | null;
 }
 
-export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user, profile }) => {
+export const AlunoDashboard: React.FC<AlunoDashboardProps> = ({ user }) => {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [proximaAula, setProximaAula] = useState<Agendamento | null>(null);
   const [loading, setLoading] = useState(true);

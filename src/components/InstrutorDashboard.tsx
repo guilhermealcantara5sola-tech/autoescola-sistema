@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Calendar, Clock, CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import type { Profile } from '../contexts/AuthContext';
 
@@ -21,7 +21,7 @@ interface Agendamento {
   veiculo: { modelo: string; placa: string } | null;
 }
 
-export const InstrutorDashboard: React.FC<InstrutorDashboardProps> = ({ user, profile }) => {
+export const InstrutorDashboard: React.FC<InstrutorDashboardProps> = ({ user }) => {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);

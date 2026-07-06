@@ -39,7 +39,7 @@ interface Agendamento {
   veiculo: { modelo: string; placa: string } | null;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, profile }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [activeTab, setActiveTab] = useState<'geral' | 'agendamentos' | 'veiculos' | 'instrutores'>('geral');
   const [loading, setLoading] = useState(true);
 
