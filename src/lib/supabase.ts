@@ -8,6 +8,8 @@ console.log('Supabase Config:', {
   url: supabaseUrl || 'Não configurada (undefined)',
   hasAnonKey: !!supabaseAnonKey,
   anonKeyLength: supabaseAnonKey ? supabaseAnonKey.length : 0,
+  anonKeyStart: supabaseAnonKey ? supabaseAnonKey.substring(0, 10) : '',
+  anonKeyEnd: supabaseAnonKey ? supabaseAnonKey.substring(supabaseAnonKey.length - 10) : '',
 });
 
 if (!supabaseUrl || !supabaseAnonKey) {
