@@ -50,8 +50,11 @@ export default async function handler(req: any, res: any) {
       .eq('telefone', cleanPhone)
       .single();
 
-    if (otpError || !otpData) {
-      return res.status(400).json({ error: 'Código de verificação inválido ou expirado.' });
+    if (otpError) {
+      return res.status(400).json({ error: `Erro no banco (OTP): ${otpError.message}` });
+    }
+    if (!otpData) {
+      return res.status(400).json({ error: 'Código de verificação não encontrado no banco de dados para este telefone.' });
     }
 
     const expiresAt = new Date(otpData.expira_em);
